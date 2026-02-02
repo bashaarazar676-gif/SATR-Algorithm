@@ -1,3 +1,7 @@
+## 🚀 Live Demo
+Experience the power of the **SATR Algorithm** instantly without any local setup. Click the button below to run the engine in Google Colab:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/197LLfimCADrKCGOVw1CFRmu6mvefMkNE?usp=sharing)
 SATR: Space-Aware Triangulation & Rendering
 SATR is an open-source geometric engine designed to transform rasterized human portraits into high-fidelity, resolution-independent vector meshes. Unlike standard image-tracing tools, SATR utilizes Adaptive Sampling to prioritize anatomical features, ensuring that critical details like eyes, lips, and contours maintain perfect sharpness at any zoom level.
 
