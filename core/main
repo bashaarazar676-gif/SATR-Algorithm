@@ -1,0 +1,297 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from google.colab import files
+
+# 1. رفع الصورة من جهازك إلى Colab
+uploaded = files.upload()
+image_path = list(uploaded.keys())[0]
+
+# 2. قراءة الصورة وتحويلها لمصفوفة بكسلات
+img = cv2.imread(image_path)
+img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+# 3. تحويل الصورة إلى "تدرج رمادي" لاكتشاف الحواف (الهيكل)
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+# 4. خوارزمية Canny لاكتشاف "نقاط التحول" (إحداثيات المتجهات)
+edges = cv2.Canny(gray, 100, 200)
+
+# 5. استخراج الإحداثيات (X, Y) لجميع النقاط المهمة
+# هذه هي النقاط التي ستبني عليها متجهاتك
+points = np.column_stack(np.where(edges > 0))
+
+print(f"عدد بكسلات الصورة الأصلية: {img.shape[0] * img.shape[1]}")
+print(f"عدد نقاط الارتكاز المستخرجة (المتجهات الأولية): {len(points)}")
+
+# عرض النتيجة
+plt.figure(figsize=(10, 5))
+plt.subplot(1, 2, 1)
+plt.title("Original Image")
+plt.imshow(img_rgb)
+plt.subplot(1, 2, 2)
+plt.title("Extracted Vector Points")
+plt.imshow(edges, cmap='gray')
+plt.show()
+from sklearn.cluster import DBSCAN
+
+# 1. تجميع النقاط القريبة من بعضها (Clustering)
+# eps: المسافة القصوى بين نقطتين ليتم اعتبارهما ضمن نفس السلسلة
+clustering = DBSCAN(eps=2, min_samples=2).fit(points)
+labels = clustering.labels_
+
+# 2. تنظيم النقاط في "سلاسل" بناءً على المجموعات
+unique_labels = set(labels)
+vector_chains = []
+
+for label in unique_labels:
+    if label == -1: continue  # تجاهل النقاط العشوائية (Noise)
+    class_member_mask = (labels == label)
+    chain = points[class_member_mask]
+    vector_chains.append(chain)
+
+print(f"تم اختزال النقاط إلى: {len(vector_chains)} سلسلة متجهة ذكية")
+
+# 3. عرض النتيجة: كل لون يمثل "سلسلة" مستقلة في خوارزميتك
+plt.figure(figsize=(10, 5))
+for chain in vector_chains:
+    plt.scatter(chain[:, 1], chain[:, 0], s=1)
+plt.gca().invert_yaxis()
+plt.title("SATR Logic: Points Grouped into Chains")
+plt.show()
+import matplotlib.colors as mcolors
+
+# 1. مصفوفة لتخزين السلاسل مع ألوانها
+colored_vector_chains = []
+
+# 2. استخراج الألوان من الصورة الأصلية لكل نقطة في كل سلسلة
+for chain in vector_chains:
+    colors = []
+    for point in chain:
+        y, x = point
+        # سحب قيمة RGB من الصورة الأصلية
+        # تأكد أن الإحداثيات ضمن حدود الصورة
+        if y < img_rgb.shape[0] and x < img_rgb.shape[1]:
+            color = img_rgb[y, x]
+            colors.append(color)
+
+    colored_vector_chains.append({
+        'points': chain,
+        'colors': np.array(colors)
+    })
+
+# 3. عرض النتيجة: إعادة رسم السلاسل بألوانها الحقيقية
+plt.figure(figsize=(10, 8))
+for v_chain in colored_vector_chains:
+    pts = v_chain['points']
+    cls = v_chain['colors'] / 255.0  # تحويل القيم لـ 0-1 لـ matplotlib
+
+    # رسم كل نقطة بلونها الحقيقي
+    plt.scatter(pts[:, 1], pts[:, 0], c=cls, s=2)
+
+plt.gca().invert_yaxis()
+plt.title("SATR Engine: Real Color Mapping to Vectors")
+plt.axis('off')
+plt.show()
+
+print(f"تم ربط الألوان لـ {len(colored_vector_chains)} سلسلة.")
+from scipy.interpolate import griddata
+
+# 1. تجميع كل النقاط والألوان التي استخرجناها في مصفوفات مسطحة
+all_pts = []
+all_cls = []
+
+for v_chain in colored_vector_chains:
+    for i in range(len(v_chain['points'])):
+        all_pts.append(v_chain['points'][i])
+        all_cls.append(v_chain['colors'][i])
+
+all_pts = np.array(all_pts)
+all_cls = np.array(all_cls)
+
+# 2. إنشاء شبكة (Grid) بحجم الصورة الأصلية لملء الفراغات
+grid_y, grid_x = np.mgrid[0:img.shape[0]:1, 0:img.shape[1]:1]
+
+# 3. خوارزمية الاستكمال (Interpolation) - لب الاختراع في ملء الفراغات دلالياً
+# هذه العملية تحاكي كيف سيعيد ملف .satr بناء الصورة
+interp_img = griddata(all_pts, all_cls, (grid_y, grid_x), method='linear')
+
+# 4. عرض النتيجة النهائية "المضغوطة دلالياً"
+plt.figure(figsize=(10, 8))
+plt.imshow(interp_img.astype(np.uint8))
+plt.title("SATR Engine: Reconstructed Image from Vectors")
+plt.axis('off')
+plt.show()
+from scipy.interpolate import griddata
+import PIL.Image
+
+# 1. حساب "خريطة الكثافة" (Density Map)
+gray_img = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+density_map = cv2.Laplacian(gray_img, cv2.CV_64F)
+density_map = np.abs(density_map)
+
+# 2. استخراج نقاط كثيفة جداً (رفعنا العدد لـ 500 ألف لزيادة الدقة)
+num_extra_points = 15000000
+y_coords, x_coords = np.where(density_map > density_map.mean())
+
+if len(y_coords) > num_extra_points:
+    indices = np.random.choice(len(y_coords), num_extra_points, replace=False)
+    adaptive_pts = np.column_stack((y_coords[indices], x_coords[indices]))
+else:
+    adaptive_pts = np.column_stack((y_coords, x_coords))
+
+# 3. دمج النقاط وسحب الألوان
+all_adaptive_pts = np.vstack((all_pts, adaptive_pts))
+all_adaptive_cls = np.array([img_rgb[int(p[0]), int(p[1])] for p in all_adaptive_pts])
+
+# 4. الاستكمال اللوني (Interpolation) لضمان عدم ظهور المثلثات
+grid_y, grid_x = np.mgrid[0:img_rgb.shape[0], 0:img_rgb.shape[1]]
+final_smooth_image = griddata(
+    all_adaptive_pts[:, [1, 0]],
+    all_adaptive_cls,
+    (grid_x, grid_y),
+    method='linear'
+)
+
+final_smooth_image = np.nan_to_num(final_smooth_image, nan=0).astype(np.uint8)
+
+# 5. تنعيم نهائي فائق للوضوح
+final_smooth_image = cv2.edgePreservingFilter(final_smooth_image, flags=1, sigma_s=10, sigma_r=0.1)
+
+# --- إضافة وظيفة الحفظ والتحميل ---
+
+# تحويل المصفوفة إلى صورة وحفظها
+output_filename = "SATR_Seamless_Ultimate.png"
+final_image_pil = PIL.Image.fromarray(final_smooth_image)
+final_image_pil.save(output_filename, quality=100, subsampling=0)
+
+# عرض النتيجة
+plt.figure(figsize=(15, 12))
+plt.imshow(final_smooth_image)
+plt.title("SATR Ultimate: Seamless Reconstruction")
+plt.axis('off')
+plt.show()
+
+# أمر التحميل التلقائي للجهاز
+from google.colab import files
+print(f"تم حفظ الصورة بنجاح باسم: {output_filename}")
+files.download(output_filename)
+
+import numpy as np
+from scipy.spatial import Delaunay
+
+def export_satr_gouraud_v1(filename, img_shape, pts, cls):
+    h, w = img_shape[:2]
+    tri = Delaunay(pts[:, [1, 0]])
+
+    header = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
+        f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" '
+        'xmlns="http://www.w3.org/2000/svg" style="background-color:black;">\n'
+        '<defs>\n'
+    )
+
+    # 1. إنشاء التدرجات لكل مثلث (الحيلة البرمجية)
+    gradients = ""
+    body = '<g id="mesh_layer">\n'
+
+    for i, t in enumerate(tri.simplices):
+        p = pts[t]
+        colors = cls[t] # ألوان الرؤوس الثلاثة بدلاً من لون واحد متوسط
+
+        # فلتر المسافة لضمان الجودة
+        dist = np.max([np.linalg.norm(p[0]-p[1]), np.linalg.norm(p[1]-p[2]), np.linalg.norm(p[2]-p[0])])
+        if dist > (w * 0.02): continue
+
+        grad_id = f"grad_{i}"
+        c1 = '#{:02x}{:02x}{:02x}'.format(*colors[0])
+        c2 = '#{:02x}{:02x}{:02x}'.format(*colors[1])
+
+        # ننشئ تدرجاً خطياً يمتد عبر أطول ضلع في المثلث
+        gradients += (
+            f'  <linearGradient id="{grad_id}" x1="{p[0][1]}" y1="{p[0][0]}" x2="{p[1][1]}" y2="{p[1][0]}" gradientUnits="userSpaceOnUse">\n'
+            f'    <stop offset="0%" stop-color="{c1}" />\n'
+            f'    <stop offset="100%" stop-color="{c2}" />\n'
+            f'  </linearGradient>\n'
+        )
+
+        points_str = f"{p[0][1]:.2f},{p[0][0]:.2f} {p[1][1]:.2f},{p[1][0]:.2f} {p[2][1]:.2f},{p[2][0]:.2f}"
+
+        # رسم المثلث باستخدام التدرج اللوني
+        body += f'  <polygon points="{points_str}" fill="url(#{grad_id})" />\n'
+
+    footer = "</g>\n</svg>"
+
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(header + gradients + "</defs>\n" + body + footer)
+
+    print(f"تم إنجاز نسخة التدرج اللوني (Gouraud Optimized): {filename}")
+
+# استخدام كثافة عالية للنتائج
+export_satr_gouraud_v1("SATR_Gouraud_Result.svg", img_rgb.shape, all_adaptive_pts[:1000000], all_adaptive_cls[:1000000])
+
+from google.colab import files
+files.download("SATR_Gouraud_Result.svg")
+import numpy as np
+import cv2
+from scipy.spatial import Delaunay
+
+def get_smart_feature_points(img_gray, num_points=60000):
+    # استخدام خوارزمية "سوبل" لاكتشاف الملامح الحادة (العين، الأنف، الفم)
+    grad_x = cv2.Sobel(img_gray, cv2.CV_64F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(img_gray, cv2.CV_64F, 0, 1, ksize=3)
+    magnitude = np.sqrt(grad_x**2 + grad_y**2)
+
+    # تحويل شدة الحواف إلى خريطة احتمالات
+    prob_map = magnitude / magnitude.sum()
+
+    # اختيار النقاط بناءً على أهمية الملامح (الأماكن الحادة تأخذ نقاطاً أكثر)
+    h, w = img_gray.shape
+    indices = np.random.choice(h * w, size=num_points, p=prob_map.flatten())
+    y, x = np.unravel_index(indices, (h, w))
+
+    return np.column_stack((y, x))
+
+# 1. استخراج نقاط الملامح الحادة (ذكاء داخلي من ابتكار SATR)
+edge_points = get_smart_feature_points(cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY))
+
+# 2. دمجها مع النقاط التكيفية السابقة
+all_pts = np.vstack([edge_points, all_adaptive_pts[:1000000]])
+all_cls = np.vstack([img_rgb[edge_points[:,0], edge_points[:,1]], all_adaptive_cls[:1000000]])
+
+# 3. تشغيل الـ Gouraud Shading (الاندماج اللوني) الذي طورناه
+export_satr_gouraud_v1("SATR_Smart_Internal.svg", img_rgb.shape, all_pts, all_cls)
+
+from google.colab import files
+files.download("SATR_Smart_Internal.svg")
+def export_satr_optimized(filename, img_shape, pts, cls):
+    h, w = img_shape[:2]
+    tri = Delaunay(pts[:, [1, 0]])
+
+    # نستخدم صيغة مختزلة للـ SVG لتقليل الحجم
+    header = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">\n'
+        '<g shape-rendering="optimizeSpeed">\n' # أمر للمتصفح لزيادة سرعة الرندر
+    )
+
+    body = ""
+    for t in tri.simplices:
+        p = pts[t]
+        # حساب لون متوسط سريع لتقليل كود التدرجات (أو الاحتفاظ بالتدرج للمناطق المهمة فقط)
+        c = np.mean(cls[t], axis=0).astype(int)
+        color_hex = '#{:02x}{:02x}{:02x}'.format(*c)
+
+        # تقليل عدد الأرقام العشرية إلى رقم واحد فقط لضغط الحجم
+        points_str = f"{p[0][1]:.1f},{p[0][0]:.1f} {p[1][1]:.1f},{p[1][0]:.1f} {p[2][1]:.1f},{p[2][0]:.1f}"
+
+        body += f'<polygon points="{points_str}" fill="{color_hex}"/>\n'
+
+    footer = "</g>\n</svg>"
+
+    with open(filename, "w") as f:
+        f.write(header + body + footer)
+    print(f"تم تصدير النسخة المحسنة يا Satr: {filename}")
+
+# تشغيل الضغط
+export_satr_optimized("SATR_Lightweight.svg", img_rgb.shape, all_pts, all_cls)
