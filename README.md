@@ -27,3 +27,34 @@ Web-Ready: Exports directly to optimized SVG formats, making it ideal for modern
 /examples: Sample SVG outputs and comparison benchmarks.
 
 /optimization: Scripts for coordinate precision reduction and file-size compression.
+🛠 Getting Started
+Follow these instructions to get a local copy of SATR up and running on your machine.
+
+Prerequisites
+You will need Python 3.8+ and the following libraries:
+
+numpy (Numerical processing)
+
+opencv-python (Image analysis)
+
+scipy (Geometric triangulation)
+
+Installation
+Clone the repo:
+
+Bash
+git clone https://github.com/your-username/SATR-Algorithm.git
+cd SATR-Algorithm
+Install dependencies:
+
+Bash
+pip install numpy opencv-python scipy
+🚀 Usage
+You can run the engine on any portrait. Simply place your image in the project folder and run:
+
+Python
+from satr_engine import SATREngine
+engine = SATREngine(source_image="portrait.jpg")
+engine.process(num_points=50000)
+engine.export_svg("output_result.svg", optimized=True)
+
