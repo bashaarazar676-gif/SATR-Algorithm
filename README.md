@@ -43,8 +43,8 @@ Installation
 Clone the repo:
 
 Bash
-git clone https://github.com/your-username/SATR-Algorithm.git
-cd SATR-Algorithm
+[git clone https://github.com/your-username/SATR-Algorithm.git
+](https://github.com/bashaarazar676-gif/SATR-Algorithm.git)cd SATR-Algorithm
 Install dependencies:
 
 Bash
